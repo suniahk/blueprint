@@ -6,7 +6,7 @@
 $collapse-transition: ($pt-transition-duration * 2) $pt-transition-ease !default;
 
 .#{$ns}-collapse {
-  transition: min-height $collapse-transition;
+  transition: max-height $collapse-transition;
 
   .#{$ns}-collapse-body {
     transition: transform $collapse-transition;
