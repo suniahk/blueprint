@@ -77,63 +77,11 @@ export interface ICollapseProps extends Props {
      */
     transitionDuration?: number;
 }
-
-export interface ICollapseState {
-    /** The state the element is currently in. */
-    animationState: AnimationStates;
-
-    /** The height that should be used for the content animations. This is a CSS value, not just a number. */
-    height: string | undefined;
-
+    
     /**
      * The most recent non-zero height (once a height has been measured upon first open; it is undefined until then)
      */
     heightWhenOpen: number | undefined;
-}
-
-/**
- * `Collapse` can be in one of six states, enumerated here.
- * When changing the `isOpen` prop, the following happens to the states:
- * isOpen={true}  : CLOSED -> OPEN_START -> OPENING -> OPEN
- * isOpen={false} : OPEN -> CLOSING_START -> CLOSING -> CLOSED
- */
-export enum AnimationStates {
-    /**
-     * The body is re-rendered, height is set to the measured body height and
-     * the body Y is set to 0.
-     */
-    OPEN_START,
-
-    /**
-     * Animation begins, height is set to auto. This is all animated, and on
-     * complete, the state changes to OPEN.
-     */
-    OPENING,
-
-    /**
-     * The collapse height is set to auto, and the body Y is set to 0 (so the
-     * element can be seen as normal).
-     */
-    OPEN,
-
-    /**
-     * Height has been changed from auto to the measured height of the body to
-     * prepare for the closing animation in CLOSING.
-     */
-    CLOSING_START,
-
-    /**
-     * Height is set to 0 and the body Y is at -height. Both of these properties
-     * are transformed, and then after the animation is complete, the state
-     * changes to CLOSED.
-     */
-    CLOSING,
-
-    /**
-     * The contents of the collapse is not rendered, the collapse height is 0,
-     * and the body Y is at -height (so that the bottom of the body is at Y=0).
-     */
-    CLOSED,
 }
 
 /**
@@ -152,44 +100,7 @@ export class Collapse extends AbstractPureComponent2<CollapseProps, ICollapseSta
         transitionDuration: 200,
     };
 
-    public static getDerivedStateFromProps(props: CollapseProps, state: ICollapseState) {
-        const { isOpen } = props;
-        const { animationState } = state;
-
-        if (isOpen) {
-            switch (animationState) {
-                case AnimationStates.OPEN:
-                    // no-op
-                    break;
-                case AnimationStates.OPENING:
-                    // allow Collapse#onDelayedStateChange() to handle the transition here
-                    break;
-                default:
-                    return { animationState: AnimationStates.OPEN_START };
-            }
-        } else {
-            switch (animationState) {
-                case AnimationStates.CLOSED:
-                    // no-op
-                    break;
-                case AnimationStates.CLOSING:
-                    // allow Collapse#onDelayedStateChange() to handle the transition here
-                    break;
-                default:
-                    // need to set an explicit height so that transition can work
-                    return {
-                        animationState: AnimationStates.CLOSING_START,
-                        height: `${state.heightWhenOpen}px`,
-                    };
-            }
-        }
-
-        return null;
-    }
-
     public state: ICollapseState = {
-        animationState: this.props.isOpen ? AnimationStates.OPEN : AnimationStates.CLOSED,
-        height: undefined,
         heightWhenOpen: undefined,
     };
 
@@ -197,36 +108,27 @@ export class Collapse extends AbstractPureComponent2<CollapseProps, ICollapseSta
     private contents: HTMLElement | null = null;
 
     public render() {
-        const isContentVisible = this.state.animationState !== AnimationStates.CLOSED;
-        const shouldRenderChildren = isContentVisible || this.props.keepChildrenMounted;
-        const displayWithTransform = isContentVisible && this.state.animationState !== AnimationStates.CLOSING;
-        const isAutoHeight = this.state.height === "auto";
+        const shouldRenderChildren = this.props.isOpen || this.props.keepChildrenMounted;
 
         const containerStyle = {
-            height: isContentVisible ? this.state.height : undefined,
-            overflowY: isAutoHeight ? "visible" : undefined,
-            // transitions don't work with height: auto
-            transition: isAutoHeight ? "none" : undefined,
+            maxHeight: this.props.isOpen ? this.state.heightWhenOpen : 0,
         };
 
         const contentsStyle = {
-            // only use heightWhenOpen while closing
-            transform: displayWithTransform ? "translateY(0)" : `translateY(-${this.state.heightWhenOpen}px)`,
-            // transitions don't work with height: auto
-            transition: isAutoHeight ? "none" : undefined,
+            transform: this.props.isOpen ? "translateY(0)" : `translateY(-${this.state.heightWhenOpen}px)`,
         };
 
         return React.createElement(
             this.props.component!,
             {
                 className: classNames(Classes.COLLAPSE, this.props.className),
+                ref: this.contentsRefHandler,
                 style: containerStyle,
             },
             React.createElement(
                 this.props.contentComponent!,
                 {
                     className: classNames(Classes.COLLAPSE_BODY, this.props.contentClassName),
-                    ref: this.contentsRefHandler,
                     style={contentsStyle},
                     "aria-hidden": !shouldRenderChildren
                 },
@@ -237,69 +139,13 @@ export class Collapse extends AbstractPureComponent2<CollapseProps, ICollapseSta
         );
     }
 
-    public componentDidMount() {
-        this.forceUpdate();
-        // HACKHACK: this should probably be done in getSnapshotBeforeUpdate
-        /* eslint-disable react/no-did-mount-set-state */
-        if (this.props.isOpen) {
-            this.setState({ animationState: AnimationStates.OPEN, height: "auto" });
-        } else {
-            this.setState({ animationState: AnimationStates.CLOSED, height: "0px" });
-        }
-        /* eslint-disable react/no-did-mount-set-state */
-    }
-
-    public componentDidUpdate() {
-        if (this.contents == null) {
-            return;
-        }
-
-        const { transitionDuration } = this.props;
-        const { animationState } = this.state;
-
-        if (animationState === AnimationStates.OPEN_START) {
-            const { clientHeight } = this.contents;
-            this.setState({
-                animationState: AnimationStates.OPENING,
-                height: `${clientHeight}px`,
-                heightWhenOpen: clientHeight,
-            });
-            this.setTimeout(() => this.onDelayedStateChange(), transitionDuration);
-        } else if (animationState === AnimationStates.CLOSING_START) {
-            const { clientHeight } = this.contents;
-            this.setTimeout(() =>
-                this.setState({
-                    animationState: AnimationStates.CLOSING,
-                    height: "0px",
-                    heightWhenOpen: clientHeight,
-                }),
-            );
-            this.setTimeout(() => this.onDelayedStateChange(), transitionDuration);
-        }
-    }
-
     private contentsRefHandler = (el: HTMLElement | null) => {
         this.contents = el;
         if (this.contents != null) {
             const height = this.contents.clientHeight;
             this.setState({
-                animationState: this.props.isOpen ? AnimationStates.OPEN : AnimationStates.CLOSED,
-                height: height === 0 ? undefined : `${height}px`,
                 heightWhenOpen: height === 0 ? undefined : height,
             });
         }
     };
-
-    private onDelayedStateChange() {
-        switch (this.state.animationState) {
-            case AnimationStates.OPENING:
-                this.setState({ animationState: AnimationStates.OPEN, height: "auto" });
-                break;
-            case AnimationStates.CLOSING:
-                this.setState({ animationState: AnimationStates.CLOSED });
-                break;
-            default:
-                break;
-        }
-    }
 }
