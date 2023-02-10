@@ -34,6 +34,23 @@ export interface ICollapseProps extends Props {
      * @default "div"
      */
     component?: React.ElementType;
+    
+    /**
+     * Component to render as the container element.  Used to wrap any content in 
+     * order to provide a single component to animate as opposed to potentially multiple.
+     * Useful when `component` is set to `tr`, for instance.
+     * This usually only needs to be set if `component` is set to something that enforces
+     * specific child components, like a table.
+     *
+     * @default "div"
+     */
+    contentComponent?: React.ElementType;
+    
+    /**
+     * Similar to className, but passed to contentComponent.
+     *
+     */
+    contentClassName?: string;
 
     /**
      * Whether the component is open or closed.
@@ -129,6 +146,7 @@ export class Collapse extends AbstractPureComponent2<CollapseProps, ICollapseSta
 
     public static defaultProps: Partial<CollapseProps> = {
         component: "div",
+        contentComponent: "div",
         isOpen: false,
         keepChildrenMounted: false,
         transitionDuration: 200,
@@ -204,14 +222,18 @@ export class Collapse extends AbstractPureComponent2<CollapseProps, ICollapseSta
                 className: classNames(Classes.COLLAPSE, this.props.className),
                 style: containerStyle,
             },
-            <div
-                className={Classes.COLLAPSE_BODY}
-                ref={this.contentsRefHandler}
-                style={contentsStyle}
-                aria-hidden={!shouldRenderChildren}
-            >
-                {shouldRenderChildren ? this.props.children : null}
-            </div>,
+            React.createElement(
+                this.props.contentComponent!,
+                {
+                    className: classNames(Classes.COLLAPSE_BODY, this.props.contentClassName),
+                    ref: this.contentsRefHandler,
+                    style={contentsStyle},
+                    "aria-hidden": !shouldRenderChildren
+                },
+                <>
+                    {shouldRenderChildren ? this.props.children : null}
+                </>
+            )
         );
     }
 
